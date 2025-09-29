@@ -1,0 +1,103 @@
+---
+title: "Qfish Report"
+author: "Riewshembok Thabah"
+output: html_document
+date: "2025-09-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+This report uses data from the Queensland Shark Control Program, available via the QFISH database. The dataset records numbers of sharks caught each year across different regions. The aim is to tidy and visualize these data to highlight spatial and temporal trends in shark catches, providing a clear summary for management and community audiences. 
+
+# Part 1: Data Provenance
+
+- Source: Queensland Government QFISH (Shark Control Program summaries).
+- Table: Number caught by area × calendar year × species group.
+- Export: Used the QFISH table export as .csv
+- Scope used here: years 2001–2025, all areas, species group = Shark (other groups dropped for clarity).
+- Caveats: Counts reflect SCP gear interactions (nets/drumlines), not true population abundance; effort and gear changes may affect totals.
+
+# Load packages and importing the dataset
+```{r}
+
+# Load libraries
+library(tidyverse)
+
+# Read the dataset
+qfish_data <- read_csv("C:/Users/riewt/OneDrive/Desktop/Qfish_dataset.csv", col_names = FALSE)
+
+# View structure
+view(qfish_data)
+```
+
+# Part 2:  Tidy the Data
+
+Tidy version of the QFISH Shark Control Program dataset, with each row representing a single observation defined by Area, Year, SpeciesGroup, and NumberCaught. Reshaping from the original wide format removed duplicate “Total” columns and allowed the data to be structured for analysis and visualization.
+
+```{r}
+# Extract header rows
+year_row <- qfish_data[2, ]
+species_row <- qfish_data[3, ]
+
+# Combine year and species group to form column names
+column_names <- map2_chr(year_row, species_row, ~ {
+  if (!is.na(.x) && !is.na(.y) && .y != "") paste0(.x, "_", .y) else NA_character_
+})
+
+# Assign column names and remove header rows
+colnames(qfish_data) <- column_names
+data_clean <- qfish_data[-c(1:3), ]
+
+# Rename first column to "Area"
+colnames(data_clean)[1] <- "Area"
+
+# Remove columns with NA or containing "Total" or "Grand"
+data_clean <- data_clean %>%
+  select(
+    which(!is.na(names(.)) & !str_detect(names(.), "Total|Grand"))
+  )
+
+# Reshape to long format
+tidy_data <- data_clean %>%
+  pivot_longer(cols = -Area, names_to = "Year_SpeciesGroup", values_to = "NumberCaught") %>%
+  separate(Year_SpeciesGroup, into = c("Year", "SpeciesGroup"), sep = "_") %>%
+  mutate(
+    Year = as.integer(Year),
+    NumberCaught = as.integer(NumberCaught)
+  ) %>%
+  drop_na()
+
+# View the cleaned data
+view(tidy_data)
+```
+
+# Part 3 - Filtering data for Shark species only
+
+Filtered dataset showing only rows where SpeciesGroup = Shark. This subset highlights annual shark catches by region, removing other groups (mammals, turtles, others) to focus the analysis on sharks.
+
+```{r}
+shark_data <- tidy_data %>%
+  filter(SpeciesGroup == "Shark")
+```
+
+# Part 4 - Plotting shark catches over time by region
+
+Annual shark catches recorded by the Queensland Shark Control Program across different regions from 2001 to 2025. Each line represents one region, showing temporal trends in shark captures and highlighting both regional differences and year-to-year variability.
+
+```{r}
+ggplot(shark_data, aes(x = Year, y = NumberCaught, color = Area)) +
+  geom_line() +
+  geom_point() +
+  labs(
+    title = "Shark Catches Over Time by Region",
+    x = "Year",
+    y = "Number of Sharks Caught",
+    color = "Region"
+  ) +
+  theme_minimal()
+```
+
